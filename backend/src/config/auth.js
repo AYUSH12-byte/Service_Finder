@@ -1,0 +1,6 @@
+const AUTH_CONFIG = {
+  ACCESS_TOKEN_EXPIRES_IN: "15m",
+  REFRESH_TOKEN_EXPIRES_IN: "7d",
+};
+
+module.exports = AUTH_CONFIG;
