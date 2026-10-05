@@ -11,6 +11,9 @@ const errorHandler = require("./middleware/errorHandler");
 const authRoutes = require("./routes/auth.routes");
 const userRoutes = require("./routes/user.routes");
 
+const categoryRoutes = require("./routes/category.routes");
+const serviceRoutes = require("./routes/service.routes");
+
 const app = express();
 
 // Security middleware
@@ -81,7 +84,8 @@ app.get("/api/health", (req, res) => {
 // Routes
 app.use("/api/v1/auth", authRoutes);
 app.use("/api/v1/users", userRoutes);
-
+app.use("/api/v1/categories", categoryRoutes);
+app.use("/api/v1/services", serviceRoutes);
 
 // 404 handler
 app.use(notFound);
