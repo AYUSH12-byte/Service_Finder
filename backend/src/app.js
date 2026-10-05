@@ -5,6 +5,9 @@ const morgan = require("morgan");
 const cookieParser = require("cookie-parser");
 const rateLimit = require("express-rate-limit");
 
+const notFound = require("./middleware/notFound");
+const errorHandler = require("./middleware/errorHandler");
+
 const app = express();
 
 // Security middleware
@@ -58,6 +61,8 @@ const apiLimiter = rateLimit({
 
   message: {
     success: false,
+    code:
+      "RATE_LIMIT_EXCEEDED",
     message:
       "Too many requests. Please try again later.",
   },
@@ -86,5 +91,11 @@ app.get(
     });
   }
 );
+
+// 404 handler
+app.use(notFound);
+
+// Global error handler
+app.use(errorHandler);
 
 module.exports = app;
