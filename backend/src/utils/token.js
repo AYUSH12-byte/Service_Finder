@@ -1,4 +1,5 @@
 const jwt = require("jsonwebtoken");
+
 const AUTH_CONFIG = require("../config/auth");
 
 const generateAccessToken = (user) => {
