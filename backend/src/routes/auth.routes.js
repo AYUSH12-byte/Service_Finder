@@ -5,7 +5,6 @@ const {
   login,
   refresh,
   logout,
-  getMe,
 } = require("../controllers/auth.controller");
 
 const validate = require("../middleware/validate");
@@ -14,7 +13,6 @@ const {
   registerSchema,
   loginSchema,
   refreshTokenSchema,
-  logoutSchema,
 } = require("../validators/auth.validator");
 
 const { authenticate } = require("../middleware/auth");
@@ -29,6 +27,5 @@ router.post("/refresh", validate(refreshTokenSchema), refresh);
 
 router.post("/logout", authenticate, logout);
 
-router.get("/me", authenticate, getMe);
 
 module.exports = router;

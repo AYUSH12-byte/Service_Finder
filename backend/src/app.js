@@ -9,6 +9,7 @@ const notFound = require("./middleware/notFound");
 const errorHandler = require("./middleware/errorHandler");
 
 const authRoutes = require("./routes/auth.routes");
+const userRoutes = require("./routes/user.routes");
 
 const app = express();
 
@@ -18,42 +19,36 @@ app.use(helmet());
 // CORS
 app.use(
   cors({
-    origin:
-      process.env.CLIENT_URL ||
-      "http://localhost:5173",
+    origin: process.env.CLIENT_URL || "http://localhost:5173",
 
     credentials: true,
-  })
+  }),
 );
 
 // Request parsing
 app.use(
   express.json({
     limit: "10mb",
-  })
+  }),
 );
 
 app.use(
   express.urlencoded({
     extended: true,
     limit: "10mb",
-  })
+  }),
 );
 
 app.use(cookieParser());
 
 // Logging
-if (
-  process.env.NODE_ENV ===
-  "development"
-) {
+if (process.env.NODE_ENV === "development") {
   app.use(morgan("dev"));
 }
 
 // Rate limiting
 const apiLimiter = rateLimit({
-  windowMs:
-    15 * 60 * 1000,
+  windowMs: 15 * 60 * 1000,
 
   max: 200,
 
@@ -63,39 +58,30 @@ const apiLimiter = rateLimit({
 
   message: {
     success: false,
-    code:
-      "RATE_LIMIT_EXCEEDED",
-    message:
-      "Too many requests. Please try again later.",
+    code: "RATE_LIMIT_EXCEEDED",
+    message: "Too many requests. Please try again later.",
   },
 });
 
-app.use(
-  "/api",
-  apiLimiter
-);
+app.use("/api", apiLimiter);
 
 // Health check
-app.get(
-  "/api/health",
-  (req, res) => {
-    res.status(200).json({
-      success: true,
+app.get("/api/health", (req, res) => {
+  res.status(200).json({
+    success: true,
 
-      message:
-        "Service Finder API is running",
+    message: "Service Finder API is running",
 
-      environment:
-        process.env.NODE_ENV,
+    environment: process.env.NODE_ENV,
 
-      timestamp:
-        new Date().toISOString(),
-    });
-  }
-);
+    timestamp: new Date().toISOString(),
+  });
+});
 
 // Routes
 app.use("/api/v1/auth", authRoutes);
+app.use("/api/v1/users", userRoutes);
+
 
 // 404 handler
 app.use(notFound);
