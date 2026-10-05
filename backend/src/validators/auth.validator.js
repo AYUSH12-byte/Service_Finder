@@ -70,19 +70,8 @@ const refreshTokenSchema = z.object({
   query: z.object({}),
 });
 
-const logoutSchema = z.object({
-  body: z.object({
-    userId: z.string().min(1, "User ID is required"),
-  }),
-
-  params: z.object({}),
-
-  query: z.object({}),
-});
-
 module.exports = {
   registerSchema,
   loginSchema,
   refreshTokenSchema,
-  logoutSchema,
 };

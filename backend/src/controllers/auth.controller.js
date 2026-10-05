@@ -89,11 +89,34 @@ const refresh = asyncHandler(async (req, res) => {
 });
 
 const logout = asyncHandler(async (req, res) => {
-  await logoutUser(req.body.userId);
+  await logoutUser(req.user._id);
 
   return successResponse({
     res,
     message: "Logout successful",
+  });
+});
+
+const getMe = asyncHandler(async (req, res) => {
+  return successResponse({
+    res,
+    message: "Authenticated user retrieved successfully",
+    data: {
+      user: {
+        id: req.user._id,
+        firstName: req.user.firstName,
+        lastName: req.user.lastName,
+        fullName: req.user.fullName,
+        email: req.user.email,
+        phone: req.user.phone,
+        role: req.user.role,
+        status: req.user.status,
+        emailVerified: req.user.emailVerified,
+        phoneVerified: req.user.phoneVerified,
+        createdAt: req.user.createdAt,
+        lastLoginAt: req.user.lastLoginAt,
+      },
+    },
   });
 });
 
@@ -102,4 +125,5 @@ module.exports = {
   login,
   refresh,
   logout,
+  getMe,
 };
