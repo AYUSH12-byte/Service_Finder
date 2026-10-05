@@ -8,6 +8,8 @@ const rateLimit = require("express-rate-limit");
 const notFound = require("./middleware/notFound");
 const errorHandler = require("./middleware/errorHandler");
 
+const authRoutes = require("./routes/auth.routes");
+
 const app = express();
 
 // Security middleware
@@ -91,6 +93,9 @@ app.get(
     });
   }
 );
+
+// Routes
+app.use("/api/v1/auth", authRoutes);
 
 // 404 handler
 app.use(notFound);
