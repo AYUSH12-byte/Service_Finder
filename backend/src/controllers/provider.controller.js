@@ -1,8 +1,10 @@
 const asyncHandler = require("../utils/asyncHandler");
 const {
-  createProviderProfile,
-  getProviderProfileByUserId,
-  updateProviderProfile,
+  addProviderService,
+  getMyProviderServices,
+  getProviderServiceById,
+  updateProviderService,
+  removeProviderService,
 } = require("../services/provider.service");
 const { createdResponse, successResponse } = require("../utils/apiResponse");
 
@@ -42,8 +44,90 @@ const updateMyProfile = asyncHandler(async (req, res) => {
   });
 });
 
+const addService = asyncHandler(async (req, res) => {
+  const providerService = await addProviderService(
+    req.user.id,
+    req.validated.body,
+  );
+
+  return createdResponse({
+    res,
+    message: "Service added to provider profile successfully",
+    data: {
+      providerService,
+    },
+  });
+});
+
+const getMyServices = asyncHandler(async (req, res) => {
+  const providerServices = await getMyProviderServices(
+    req.user.id,
+    req.validated?.query || {},
+  );
+
+  return successResponse({
+    res,
+    message: "Provider services retrieved successfully",
+    data: {
+      providerServices,
+    },
+  });
+});
+
+const getMyService = asyncHandler(async (req, res) => {
+  const providerService = await getProviderServiceById(
+    req.user.id,
+    req.validated.params.id,
+  );
+
+  return successResponse({
+    res,
+    message: "Provider service retrieved successfully",
+    data: {
+      providerService,
+    },
+  });
+});
+
+const updateMyService = asyncHandler(async (req, res) => {
+  const providerService = await updateProviderService(
+    req.user.id,
+    req.validated.params.id,
+    req.validated.body,
+  );
+
+  return successResponse({
+    res,
+    message: "Provider service updated successfully",
+    data: {
+      providerService,
+    },
+  });
+});
+
+const removeMyService = asyncHandler(
+  async (req, res) => {
+    await removeProviderService(
+      req.user.id,
+      req.validated.params.id
+    );
+
+    return successResponse({
+      res,
+      message:
+        "Service removed from provider profile successfully",
+    });
+  }
+);
+
 module.exports = {
   createProfile,
   getMyProfile,
   updateMyProfile,
+
+  addService,
+  getMyServices,
+  getMyService,
+  updateMyService,
+  removeMyService,
 };
