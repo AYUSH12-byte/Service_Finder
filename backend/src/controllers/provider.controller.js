@@ -1,5 +1,8 @@
 const asyncHandler = require("../utils/asyncHandler");
 const {
+  createProviderProfile,
+  getProviderProfileByUserId,
+  updateProviderProfile,
   addProviderService,
   getMyProviderServices,
   getProviderServiceById,
