@@ -16,6 +16,7 @@ const KYC_STATUS = {
 
 const providerSchema = new mongoose.Schema(
   {
+    // User relationship
     user: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
@@ -24,6 +25,7 @@ const providerSchema = new mongoose.Schema(
       index: true,
     },
 
+    // Provider profile
     businessName: {
       type: String,
       trim: true,
@@ -51,6 +53,7 @@ const providerSchema = new mongoose.Schema(
       default: null,
     },
 
+    // Service areas
     serviceAreas: [
       {
         type: String,
@@ -59,50 +62,179 @@ const providerSchema = new mongoose.Schema(
       },
     ],
 
-    availability: {
-      monday: {
-        enabled: { type: Boolean, default: true },
-        startTime: { type: String, default: "09:00" },
-        endTime: { type: String, default: "18:00" },
+    // Provider location
+    //
+    // GeoJSON Point:
+    // coordinates = [longitude, latitude]
+    //
+    // Example:
+    // [87.2833, 26.6667]
+    location: {
+      type: {
+        type: String,
+        enum: ["Point"],
+        default: "Point",
       },
 
-      tuesday: {
-        enabled: { type: Boolean, default: true },
-        startTime: { type: String, default: "09:00" },
-        endTime: { type: String, default: "18:00" },
+      coordinates: {
+        type: [Number],
+        default: undefined,
+
+        validate: {
+          validator: function (value) {
+            if (!value) {
+              return true;
+            }
+
+            if (value.length !== 2) {
+              return false;
+            }
+
+            const [longitude, latitude] = value;
+
+            return (
+              longitude >= -180 &&
+              longitude <= 180 &&
+              latitude >= -90 &&
+              latitude <= 90
+            );
+          },
+
+          message: "Location coordinates must be [longitude, latitude]",
+        },
       },
 
-      wednesday: {
-        enabled: { type: Boolean, default: true },
-        startTime: { type: String, default: "09:00" },
-        endTime: { type: String, default: "18:00" },
-      },
-
-      thursday: {
-        enabled: { type: Boolean, default: true },
-        startTime: { type: String, default: "09:00" },
-        endTime: { type: String, default: "18:00" },
-      },
-
-      friday: {
-        enabled: { type: Boolean, default: true },
-        startTime: { type: String, default: "09:00" },
-        endTime: { type: String, default: "18:00" },
-      },
-
-      saturday: {
-        enabled: { type: Boolean, default: true },
-        startTime: { type: String, default: "09:00" },
-        endTime: { type: String, default: "18:00" },
-      },
-
-      sunday: {
-        enabled: { type: Boolean, default: false },
-        startTime: { type: String, default: "09:00" },
-        endTime: { type: String, default: "18:00" },
+      address: {
+        type: String,
+        trim: true,
+        maxlength: 300,
+        default: null,
       },
     },
 
+    // Provider availability
+    availability: {
+      monday: {
+        enabled: {
+          type: Boolean,
+          default: true,
+        },
+
+        startTime: {
+          type: String,
+          default: "09:00",
+        },
+
+        endTime: {
+          type: String,
+          default: "18:00",
+        },
+      },
+
+      tuesday: {
+        enabled: {
+          type: Boolean,
+          default: true,
+        },
+
+        startTime: {
+          type: String,
+          default: "09:00",
+        },
+
+        endTime: {
+          type: String,
+          default: "18:00",
+        },
+      },
+
+      wednesday: {
+        enabled: {
+          type: Boolean,
+          default: true,
+        },
+
+        startTime: {
+          type: String,
+          default: "09:00",
+        },
+
+        endTime: {
+          type: String,
+          default: "18:00",
+        },
+      },
+
+      thursday: {
+        enabled: {
+          type: Boolean,
+          default: true,
+        },
+
+        startTime: {
+          type: String,
+          default: "09:00",
+        },
+
+        endTime: {
+          type: String,
+          default: "18:00",
+        },
+      },
+
+      friday: {
+        enabled: {
+          type: Boolean,
+          default: true,
+        },
+
+        startTime: {
+          type: String,
+          default: "09:00",
+        },
+
+        endTime: {
+          type: String,
+          default: "18:00",
+        },
+      },
+
+      saturday: {
+        enabled: {
+          type: Boolean,
+          default: true,
+        },
+
+        startTime: {
+          type: String,
+          default: "09:00",
+        },
+
+        endTime: {
+          type: String,
+          default: "18:00",
+        },
+      },
+
+      sunday: {
+        enabled: {
+          type: Boolean,
+          default: false,
+        },
+
+        startTime: {
+          type: String,
+          default: "09:00",
+        },
+
+        endTime: {
+          type: String,
+          default: "18:00",
+        },
+      },
+    },
+
+    // Provider verification
     verificationStatus: {
       type: String,
       enum: Object.values(PROVIDER_VERIFICATION_STATUS),
@@ -128,6 +260,7 @@ const providerSchema = new mongoose.Schema(
       default: null,
     },
 
+    // KYC
     kyc: {
       status: {
         type: String,
@@ -177,6 +310,7 @@ const providerSchema = new mongoose.Schema(
       },
     },
 
+    // Provider statistics
     stats: {
       averageRating: {
         type: Number,
@@ -211,17 +345,43 @@ const providerSchema = new mongoose.Schema(
   },
 );
 
+// Indexes
+
+/**
+ * Provider verification + rating
+ *
+ * Helps find verified providers and sort them by rating.
+ */
 providerSchema.index({
   verificationStatus: 1,
   "stats.averageRating": -1,
 });
 
+/**
+ * Service area search
+ */
 providerSchema.index({
   serviceAreas: 1,
 });
 
+/**
+ * Geospatial index
+ *
+ * Required for MongoDB geospatial queries such as:
+ *
+ * $near
+ * $geoNear
+ * $maxDistance
+ */
+providerSchema.index({
+  location: "2dsphere",
+});
+
+// Model export
 module.exports = {
   Provider: mongoose.model("Provider", providerSchema),
+
   PROVIDER_VERIFICATION_STATUS,
+
   KYC_STATUS,
 };
