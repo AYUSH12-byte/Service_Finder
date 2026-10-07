@@ -334,6 +334,151 @@ const removeProviderService = async (userId, providerServiceId) => {
   return true;
 };
 
+const discoverProviders = async (filters = {}) => {
+  const {
+    serviceId,
+    serviceArea,
+    search,
+    minRating,
+    maxPrice,
+    page = 1,
+    limit = 10,
+  } = filters;
+
+  const providerQuery = {
+    verificationStatus: "VERIFIED",
+  };
+
+  if (serviceArea) {
+    providerQuery.serviceAreas = {
+      $regex: serviceArea,
+      $options: "i",
+    };
+  }
+
+  if (minRating !== undefined) {
+    providerQuery["stats.averageRating"] = {
+      $gte: minRating,
+    };
+  }
+
+  if (search) {
+    providerQuery.$or = [
+      {
+        businessName: {
+          $regex: search,
+          $options: "i",
+        },
+      },
+      {
+        bio: {
+          $regex: search,
+          $options: "i",
+        },
+      },
+    ];
+  }
+
+  const skip = (page - 1) * limit;
+
+  const providers = await Provider.find(
+    providerQuery
+  )
+    .populate({
+      path: "user",
+      select:
+        "firstName lastName profileImage status",
+    })
+    .sort({
+      "stats.averageRating": -1,
+      "stats.completedJobs": -1,
+    })
+    .skip(skip)
+    .limit(limit);
+
+  const providerIds = providers.map(
+    (provider) => provider._id
+  );
+
+  const serviceQuery = {
+    provider: {
+      $in: providerIds,
+    },
+    isActive: true,
+  };
+
+  if (serviceId) {
+    serviceQuery.service = serviceId;
+  }
+
+  if (maxPrice !== undefined) {
+    serviceQuery.price = {
+      $lte: maxPrice,
+    };
+  }
+
+  const providerServices =
+    await ProviderService.find(serviceQuery)
+      .populate({
+        path: "service",
+        select:
+          "name slug description basePrice priceType category",
+        populate: {
+          path: "category",
+          select: "name slug",
+        },
+      });
+
+  const servicesByProvider = new Map();
+
+  for (const providerService of providerServices) {
+    const key =
+      providerService.provider.toString();
+
+    if (!servicesByProvider.has(key)) {
+      servicesByProvider.set(key, []);
+    }
+
+    servicesByProvider
+      .get(key)
+      .push(providerService);
+  }
+
+  const filteredProviders = providers
+    .map((provider) => {
+      const services =
+        servicesByProvider.get(
+          provider._id.toString()
+        ) || [];
+
+      return {
+        provider,
+        services,
+      };
+    })
+    .filter((item) => {
+      if (!serviceId && maxPrice === undefined) {
+        return true;
+      }
+
+      return item.services.length > 0;
+    });
+
+  const total = await Provider.countDocuments(
+    providerQuery
+  );
+
+  return {
+    providers: filteredProviders,
+    pagination: {
+      page,
+      limit,
+      total,
+      totalPages: Math.ceil(total / limit),
+    },
+  };
+};
+
 // Export services
 module.exports = {
   createProviderProfile,
@@ -345,4 +490,5 @@ module.exports = {
   getProviderServiceById,
   updateProviderService,
   removeProviderService,
+  discoverProviders,
 };

@@ -15,6 +15,7 @@ const categoryRoutes = require("./routes/category.routes");
 const serviceRoutes = require("./routes/service.routes");
 const providerRoutes = require("./routes/provider.routes");
 const adminProviderRoutes = require("./routes/adminProvider.routes");
+const publicProviderRoutes = require("./routes/publicProvider.routes");
 
 const app = express();
 
@@ -90,6 +91,7 @@ app.use("/api/v1/categories", categoryRoutes);
 app.use("/api/v1/services", serviceRoutes);
 app.use("/api/v1/providers", providerRoutes);
 app.use("/api/v1/admin/providers", adminProviderRoutes);
+app.use("/api/v1/discovery/providers", publicProviderRoutes);
 
 // 404 handler
 app.use(notFound);

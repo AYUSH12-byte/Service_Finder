@@ -5,6 +5,7 @@ const {
   getProviderServiceById,
   updateProviderService,
   removeProviderService,
+  discoverProviders,
 } = require("../services/provider.service");
 const { createdResponse, successResponse } = require("../utils/apiResponse");
 
@@ -120,6 +121,23 @@ const removeMyService = asyncHandler(
   }
 );
 
+const discover = asyncHandler(
+  async (req, res) => {
+    const result =
+      await discoverProviders(
+        req.validated.query
+      );
+
+    return successResponse({
+      res,
+      message:
+        "Providers retrieved successfully",
+      data: result.providers,
+      meta: result.pagination,
+    });
+  }
+);
+
 module.exports = {
   createProfile,
   getMyProfile,
@@ -130,4 +148,5 @@ module.exports = {
   getMyService,
   updateMyService,
   removeMyService,
+  discover,
 };

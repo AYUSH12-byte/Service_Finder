@@ -50,7 +50,64 @@ const updateProviderProfileSchema = z.object({
   query: z.object({}).optional(),
 });
 
+const providerDiscoverySchema = z.object({
+  body: z.object({}).optional(),
+
+  params: z.object({}).optional(),
+
+  query: z.object({
+    serviceId: z
+      .string()
+      .regex(
+        /^[0-9a-fA-F]{24}$/,
+        "Invalid service ID"
+      )
+      .optional(),
+
+    serviceArea: z
+      .string()
+      .trim()
+      .max(100)
+      .optional(),
+
+    search: z
+      .string()
+      .trim()
+      .max(100)
+      .optional(),
+
+    minRating: z
+      .coerce
+      .number()
+      .min(0)
+      .max(5)
+      .optional(),
+
+    maxPrice: z
+      .coerce
+      .number()
+      .min(0)
+      .optional(),
+
+    page: z
+      .coerce
+      .number()
+      .int()
+      .min(1)
+      .default(1),
+
+    limit: z
+      .coerce
+      .number()
+      .int()
+      .min(1)
+      .max(50)
+      .default(10),
+  }),
+});
+
 module.exports = {
   createProviderProfileSchema,
   updateProviderProfileSchema,
+  providerDiscoverySchema,
 };
