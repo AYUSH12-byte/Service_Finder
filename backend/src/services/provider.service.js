@@ -4,27 +4,23 @@ const { ProviderService } = require("../models/ProviderService");
 const Service = require("../models/Service");
 const AppError = require("../utils/AppError");
 
-const {
-  calculateProviderMatchScore,
-} = require("../utils/providerMatching");
+const { calculateProviderMatchScore } = require("../utils/providerMatching");
 
-// Provider profile
+/**
+ * Create provider profile
+ */
 const createProviderProfile = async (userId, profileData) => {
   const user = await User.findById(userId);
 
   if (!user) {
-    throw new AppError(
-      "User account not found",
-      404,
-      "USER_NOT_FOUND"
-    );
+    throw new AppError("User account not found", 404, "USER_NOT_FOUND");
   }
 
   if (user.role !== USER_ROLES.PROVIDER) {
     throw new AppError(
       "Only provider accounts can create provider profiles",
       403,
-      "PROVIDER_ROLE_REQUIRED"
+      "PROVIDER_ROLE_REQUIRED",
     );
   }
 
@@ -36,7 +32,7 @@ const createProviderProfile = async (userId, profileData) => {
     throw new AppError(
       "Provider profile already exists",
       409,
-      "PROVIDER_PROFILE_EXISTS"
+      "PROVIDER_PROFILE_EXISTS",
     );
   }
 
@@ -52,6 +48,9 @@ const createProviderProfile = async (userId, profileData) => {
   });
 };
 
+/**
+ * Get current provider profile
+ */
 const getProviderProfileByUserId = async (userId) => {
   const provider = await Provider.findOne({
     user: userId,
@@ -65,13 +64,16 @@ const getProviderProfileByUserId = async (userId) => {
     throw new AppError(
       "Provider profile not found",
       404,
-      "PROVIDER_PROFILE_NOT_FOUND"
+      "PROVIDER_PROFILE_NOT_FOUND",
     );
   }
 
   return provider;
 };
 
+/**
+ * Update provider profile
+ */
 const updateProviderProfile = async (userId, profileData) => {
   const provider = await Provider.findOne({
     user: userId,
@@ -81,7 +83,7 @@ const updateProviderProfile = async (userId, profileData) => {
     throw new AppError(
       "Provider profile not found",
       404,
-      "PROVIDER_PROFILE_NOT_FOUND"
+      "PROVIDER_PROFILE_NOT_FOUND",
     );
   }
 
@@ -89,7 +91,7 @@ const updateProviderProfile = async (userId, profileData) => {
     throw new AppError(
       "Suspended provider profiles cannot be updated",
       403,
-      "PROVIDER_SUSPENDED"
+      "PROVIDER_SUSPENDED",
     );
   }
 
@@ -104,7 +106,9 @@ const updateProviderProfile = async (userId, profileData) => {
   });
 };
 
-// Provider services
+/**
+ * Add a service to provider profile
+ */
 const addProviderService = async (userId, serviceData) => {
   const provider = await Provider.findOne({
     user: userId,
@@ -114,7 +118,7 @@ const addProviderService = async (userId, serviceData) => {
     throw new AppError(
       "Provider profile not found",
       404,
-      "PROVIDER_PROFILE_NOT_FOUND"
+      "PROVIDER_PROFILE_NOT_FOUND",
     );
   }
 
@@ -122,63 +126,49 @@ const addProviderService = async (userId, serviceData) => {
     throw new AppError(
       "Suspended providers cannot add services",
       403,
-      "PROVIDER_SUSPENDED"
+      "PROVIDER_SUSPENDED",
     );
   }
 
-  const service = await Service.findById(
-    serviceData.serviceId
-  );
+  const service = await Service.findById(serviceData.serviceId);
 
   if (!service) {
-    throw new AppError(
-      "Service not found",
-      404,
-      "SERVICE_NOT_FOUND"
-    );
+    throw new AppError("Service not found", 404, "SERVICE_NOT_FOUND");
   }
 
   if (!service.isActive) {
     throw new AppError(
       "This service is currently inactive",
       400,
-      "SERVICE_INACTIVE"
+      "SERVICE_INACTIVE",
     );
   }
 
-  const existingProviderService =
-    await ProviderService.findOne({
-      provider: provider._id,
-      service: service._id,
-    });
+  const existingProviderService = await ProviderService.findOne({
+    provider: provider._id,
+    service: service._id,
+  });
 
   if (existingProviderService) {
     throw new AppError(
       "Provider already offers this service",
       409,
-      "PROVIDER_SERVICE_EXISTS"
+      "PROVIDER_SERVICE_EXISTS",
     );
   }
 
-  const providerService =
-    await ProviderService.create({
-      provider: provider._id,
-      service: service._id,
-      price: serviceData.price,
-      priceType: serviceData.priceType,
-      experienceYears:
-        serviceData.experienceYears ??
-        provider.experienceYears,
-      description:
-        serviceData.description ?? null,
-    });
+  const providerService = await ProviderService.create({
+    provider: provider._id,
+    service: service._id,
+    price: serviceData.price,
+    priceType: serviceData.priceType,
+    experienceYears: serviceData.experienceYears ?? provider.experienceYears,
+    description: serviceData.description ?? null,
+  });
 
-  return ProviderService.findById(
-    providerService._id
-  ).populate({
+  return ProviderService.findById(providerService._id).populate({
     path: "service",
-    select:
-      "name slug description basePrice priceType category isActive",
+    select: "name slug description basePrice priceType category isActive",
     populate: {
       path: "category",
       select: "name slug",
@@ -186,10 +176,10 @@ const addProviderService = async (userId, serviceData) => {
   });
 };
 
-const getMyProviderServices = async (
-  userId,
-  filters = {}
-) => {
+/**
+ * Get all services of current provider
+ */
+const getMyProviderServices = async (userId, filters = {}) => {
   const provider = await Provider.findOne({
     user: userId,
   });
@@ -198,7 +188,7 @@ const getMyProviderServices = async (
     throw new AppError(
       "Provider profile not found",
       404,
-      "PROVIDER_PROFILE_NOT_FOUND"
+      "PROVIDER_PROFILE_NOT_FOUND",
     );
   }
 
@@ -210,28 +200,26 @@ const getMyProviderServices = async (
     query.isActive = filters.active;
   }
 
-  const providerServices =
-    await ProviderService.find(query)
-      .populate({
-        path: "service",
-        select:
-          "name slug description basePrice priceType category isActive",
-        populate: {
-          path: "category",
-          select: "name slug",
-        },
-      })
-      .sort({
-        createdAt: -1,
-      });
+  const providerServices = await ProviderService.find(query)
+    .populate({
+      path: "service",
+      select: "name slug description basePrice priceType category isActive",
+      populate: {
+        path: "category",
+        select: "name slug",
+      },
+    })
+    .sort({
+      createdAt: -1,
+    });
 
   return providerServices;
 };
 
-const getProviderServiceById = async (
-  userId,
-  providerServiceId
-) => {
+/**
+ * Get one provider service
+ */
+const getProviderServiceById = async (userId, providerServiceId) => {
   const provider = await Provider.findOne({
     user: userId,
   });
@@ -240,40 +228,37 @@ const getProviderServiceById = async (
     throw new AppError(
       "Provider profile not found",
       404,
-      "PROVIDER_PROFILE_NOT_FOUND"
+      "PROVIDER_PROFILE_NOT_FOUND",
     );
   }
 
-  const providerService =
-    await ProviderService.findOne({
-      _id: providerServiceId,
-      provider: provider._id,
-    }).populate({
-      path: "service",
-      select:
-        "name slug description basePrice priceType category isActive",
-      populate: {
-        path: "category",
-        select: "name slug",
-      },
-    });
+  const providerService = await ProviderService.findOne({
+    _id: providerServiceId,
+    provider: provider._id,
+  }).populate({
+    path: "service",
+    select: "name slug description basePrice priceType category isActive",
+    populate: {
+      path: "category",
+      select: "name slug",
+    },
+  });
 
   if (!providerService) {
     throw new AppError(
       "Provider service not found",
       404,
-      "PROVIDER_SERVICE_NOT_FOUND"
+      "PROVIDER_SERVICE_NOT_FOUND",
     );
   }
 
   return providerService;
 };
 
-const updateProviderService = async (
-  userId,
-  providerServiceId,
-  updateData
-) => {
+/**
+ * Update provider service
+ */
+const updateProviderService = async (userId, providerServiceId, updateData) => {
   const provider = await Provider.findOne({
     user: userId,
   });
@@ -282,7 +267,7 @@ const updateProviderService = async (
     throw new AppError(
       "Provider profile not found",
       404,
-      "PROVIDER_PROFILE_NOT_FOUND"
+      "PROVIDER_PROFILE_NOT_FOUND",
     );
   }
 
@@ -290,21 +275,20 @@ const updateProviderService = async (
     throw new AppError(
       "Suspended providers cannot update services",
       403,
-      "PROVIDER_SUSPENDED"
+      "PROVIDER_SUSPENDED",
     );
   }
 
-  const providerService =
-    await ProviderService.findOne({
-      _id: providerServiceId,
-      provider: provider._id,
-    });
+  const providerService = await ProviderService.findOne({
+    _id: providerServiceId,
+    provider: provider._id,
+  });
 
   if (!providerService) {
     throw new AppError(
       "Provider service not found",
       404,
-      "PROVIDER_SERVICE_NOT_FOUND"
+      "PROVIDER_SERVICE_NOT_FOUND",
     );
   }
 
@@ -312,12 +296,9 @@ const updateProviderService = async (
 
   await providerService.save();
 
-  return ProviderService.findById(
-    providerService._id
-  ).populate({
+  return ProviderService.findById(providerService._id).populate({
     path: "service",
-    select:
-      "name slug description basePrice priceType category isActive",
+    select: "name slug description basePrice priceType category isActive",
     populate: {
       path: "category",
       select: "name slug",
@@ -325,10 +306,10 @@ const updateProviderService = async (
   });
 };
 
-const removeProviderService = async (
-  userId,
-  providerServiceId
-) => {
+/**
+ * Remove provider service
+ */
+const removeProviderService = async (userId, providerServiceId) => {
   const provider = await Provider.findOne({
     user: userId,
   });
@@ -337,21 +318,20 @@ const removeProviderService = async (
     throw new AppError(
       "Provider profile not found",
       404,
-      "PROVIDER_PROFILE_NOT_FOUND"
+      "PROVIDER_PROFILE_NOT_FOUND",
     );
   }
 
-  const providerService =
-    await ProviderService.findOne({
-      _id: providerServiceId,
-      provider: provider._id,
-    });
+  const providerService = await ProviderService.findOne({
+    _id: providerServiceId,
+    provider: provider._id,
+  });
 
   if (!providerService) {
     throw new AppError(
       "Provider service not found",
       404,
-      "PROVIDER_SERVICE_NOT_FOUND"
+      "PROVIDER_SERVICE_NOT_FOUND",
     );
   }
 
@@ -360,18 +340,17 @@ const removeProviderService = async (
   return true;
 };
 
-// Helper: current availability
-
-/*
- * This checks the provider's normal weekly availability.
+/**
+ * Check provider's current weekly availability.
  *
- * It is NOT appointment availability yet.
+ * This is NOT appointment availability.
  *
- * Later, the Booking module can check:
+ * Booking module will later check:
  * - requested date
  * - requested time
  * - existing bookings
  * - blocked dates
+ * - overlapping bookings
  */
 const isProviderCurrentlyAvailable = (provider) => {
   if (!provider.availability) {
@@ -392,8 +371,7 @@ const isProviderCurrentlyAvailable = (provider) => {
 
   const currentDay = dayNames[now.getDay()];
 
-  const schedule =
-    provider.availability[currentDay];
+  const schedule = provider.availability[currentDay];
 
   if (!schedule || !schedule.enabled) {
     return false;
@@ -403,29 +381,37 @@ const isProviderCurrentlyAvailable = (provider) => {
     return false;
   }
 
-  const currentMinutes =
-    now.getHours() * 60 +
-    now.getMinutes();
+  const currentMinutes = now.getHours() * 60 + now.getMinutes();
 
-  const [startHour, startMinute] =
-    schedule.startTime.split(":").map(Number);
+  const [startHour, startMinute] = schedule.startTime.split(":").map(Number);
 
-  const [endHour, endMinute] =
-    schedule.endTime.split(":").map(Number);
+  const [endHour, endMinute] = schedule.endTime.split(":").map(Number);
 
-  const startMinutes =
-    startHour * 60 + startMinute;
+  const startMinutes = startHour * 60 + startMinute;
 
-  const endMinutes =
-    endHour * 60 + endMinute;
+  const endMinutes = endHour * 60 + endMinute;
 
-  return (
-    currentMinutes >= startMinutes &&
-    currentMinutes <= endMinutes
-  );
+  return currentMinutes >= startMinutes && currentMinutes <= endMinutes;
 };
 
-// Smart provider discovery
+/**
+ * Discover verified providers using:
+ * - Service
+ * - Service area
+ * - Search
+ * - Rating
+ * - Maximum price
+ * - Customer location
+ * - Distance
+ * - Provider rating
+ * - Completed jobs
+ * - Response rate
+ * - Price
+ * - Current availability
+ *
+ * Providers are finally ranked using
+ * calculateProviderMatchScore().
+ */
 const discoverProviders = async (filters = {}) => {
   const {
     serviceId,
@@ -440,7 +426,6 @@ const discoverProviders = async (filters = {}) => {
     limit = 10,
   } = filters;
 
-  // Step 1: Build provider query
   const providerQuery = {
     verificationStatus: "VERIFIED",
   };
@@ -475,39 +460,31 @@ const discoverProviders = async (filters = {}) => {
     ];
   }
 
-  // Step 2: Location filter
-  //
-  // MongoDB GeoJSON format:
-  // [longitude, latitude]
-  //
-  // NOT:
-  // [latitude, longitude]
-  const hasLocation =
-    latitude !== undefined &&
-    longitude !== undefined;
+  const hasLocation = latitude !== undefined && longitude !== undefined;
 
+  /*
+   * GeoJSON coordinate order:
+   * [longitude, latitude]
+   *
+   * Example:
+   * Itahari:
+   * [87.2833, 26.6667]
+   */
   if (hasLocation) {
     providerQuery.location = {
       $near: {
         $geometry: {
           type: "Point",
-          coordinates: [
-            longitude,
-            latitude,
-          ],
+          coordinates: [longitude, latitude],
         },
         $maxDistance: maxDistanceKm * 1000,
       },
     };
   }
 
-  // Step 3: Fetch verified providers
-  const providers = await Provider.find(
-    providerQuery
-  ).populate({
+  const providers = await Provider.find(providerQuery).populate({
     path: "user",
-    select:
-      "firstName lastName profileImage status",
+    select: "firstName lastName profileImage status",
   });
 
   if (providers.length === 0) {
@@ -522,10 +499,7 @@ const discoverProviders = async (filters = {}) => {
     };
   }
 
-  // Step 4: Find provider services
-  const providerIds = providers.map(
-    (provider) => provider._id
-  );
+  const providerIds = providers.map((provider) => provider._id);
 
   const serviceQuery = {
     provider: {
@@ -544,42 +518,30 @@ const discoverProviders = async (filters = {}) => {
     };
   }
 
-  const providerServices =
-    await ProviderService.find(
-      serviceQuery
-    ).populate({
-      path: "service",
-      select:
-        "name slug description basePrice priceType category",
-      populate: {
-        path: "category",
-        select: "name slug",
-      },
-    });
+  const providerServices = await ProviderService.find(serviceQuery).populate({
+    path: "service",
+    select: "name slug description basePrice priceType category",
+    populate: {
+      path: "category",
+      select: "name slug",
+    },
+  });
 
-  // Step 5: Group services by provider
   const servicesByProvider = new Map();
 
   for (const providerService of providerServices) {
-    const key =
-      providerService.provider.toString();
+    const key = providerService.provider.toString();
 
     if (!servicesByProvider.has(key)) {
       servicesByProvider.set(key, []);
     }
 
-    servicesByProvider
-      .get(key)
-      .push(providerService);
+    servicesByProvider.get(key).push(providerService);
   }
 
-  // Step 6: Remove providers without matching services
   let matchedProviders = providers
     .map((provider) => {
-      const services =
-        servicesByProvider.get(
-          provider._id.toString()
-        ) || [];
+      const services = servicesByProvider.get(provider._id.toString()) || [];
 
       return {
         provider,
@@ -587,13 +549,19 @@ const discoverProviders = async (filters = {}) => {
       };
     })
     .filter((item) => {
-      if (
-        !serviceId &&
-        maxPrice === undefined
-      ) {
+      /*
+       * If no service filter and no price
+       * filter is supplied, all verified
+       * providers can appear.
+       */
+      if (!serviceId && maxPrice === undefined) {
         return true;
       }
 
+      /*
+       * Otherwise provider must have
+       * at least one matching service.
+       */
       return item.services.length > 0;
     });
 
@@ -609,161 +577,99 @@ const discoverProviders = async (filters = {}) => {
     };
   }
 
-  // Step 7: Find price range
-  const allPrices = matchedProviders.flatMap(
-    (item) =>
-      item.services
-        .map((service) => service.price)
-        .filter(
-          (price) =>
-            typeof price === "number"
-        )
+  const allPrices = matchedProviders.flatMap((item) =>
+    item.services
+      .map((service) => service.price)
+      .filter((price) => typeof price === "number"),
   );
 
-  const minProviderPrice =
-    allPrices.length > 0
-      ? Math.min(...allPrices)
-      : 0;
+  const minProviderPrice = allPrices.length > 0 ? Math.min(...allPrices) : 0;
 
-  const maxProviderPrice =
-    allPrices.length > 0
-      ? Math.max(...allPrices)
-      : 0;
+  const maxProviderPrice = allPrices.length > 0 ? Math.max(...allPrices) : 0;
 
-  // Step 8: Calculate smart match score
-  matchedProviders = matchedProviders.map(
-    (item) => {
-      const provider = item.provider;
+  matchedProviders = matchedProviders.map((item) => {
+    const provider = item.provider;
 
-      // Find the lowest price offered by this provider for the matching services.
-      const providerPrices =
-        item.services
-          .map(
-            (service) => service.price
-          )
-          .filter(
-            (price) =>
-              typeof price === "number"
-          );
+    /*
+     * Get provider prices.
+     * If provider offers multiple
+     * matching services, use the
+     * lowest price for matching.
+     */
+    const providerPrices = item.services
+      .map((service) => service.price)
+      .filter((price) => typeof price === "number");
 
-      const providerPrice =
-        providerPrices.length > 0
-          ? Math.min(...providerPrices)
-          : null;
+    const providerPrice =
+      providerPrices.length > 0 ? Math.min(...providerPrices) : null;
 
-      // Calculate distance.
-      //
-      // When latitude/longitude are supplied,
-      // MongoDB's $near orders by distance,
-      // but for the actual score we calculate
-      // distance using the Haversine formula.
-      let distanceKm = null;
+    let distanceKm = null;
 
-      if (
-        hasLocation &&
-        provider.location?.coordinates?.length ===
-          2
-      ) {
-        const [
-          providerLongitude,
-          providerLatitude,
-        ] = provider.location.coordinates;
+    if (hasLocation && provider.location?.coordinates?.length === 2) {
+      const [providerLongitude, providerLatitude] =
+        provider.location.coordinates;
 
-        distanceKm = calculateDistanceKm(
-          latitude,
-          longitude,
-          providerLatitude,
-          providerLongitude
-        );
-      }
-
-      // Check normal weekly availability.
-      const isAvailable =
-        isProviderCurrentlyAvailable(
-          provider
-        );
-
-      // Calculate final score.
-      const matchScore =
-        calculateProviderMatchScore({
-          rating:
-            provider.stats
-              ?.averageRating || 0,
-
-          distanceKm,
-
-          completedJobs:
-            provider.stats
-              ?.completedJobs || 0,
-
-          responseRate:
-            provider.stats
-              ?.responseRate || 0,
-
-          price: providerPrice,
-
-          minPrice:
-            minProviderPrice,
-
-          maxPrice:
-            maxProviderPrice,
-
-          isAvailable,
-        });
-
-      return {
-        provider,
-        services: item.services,
-
-        matchScore,
-
-        matchingFactors: {
-          rating:
-            provider.stats
-              ?.averageRating || 0,
-
-          distanceKm:
-            distanceKm !== null
-              ? Math.round(
-                  distanceKm * 100
-                ) / 100
-              : null,
-
-          completedJobs:
-            provider.stats
-              ?.completedJobs || 0,
-
-          responseRate:
-            provider.stats
-              ?.responseRate || 0,
-
-          price: providerPrice,
-
-          isAvailable,
-        },
-      };
+      distanceKm = calculateDistanceKm(
+        latitude,
+        longitude,
+        providerLatitude,
+        providerLongitude,
+      );
     }
-  );
 
-  // Step 9: Sort by smart match score
-  // Highest score appears first.
-  matchedProviders.sort(
-    (a, b) =>
-      b.matchScore - a.matchScore
-  );
+    const isAvailable = isProviderCurrentlyAvailable(provider);
 
-  // Step 10: Pagination
+    const matchScore = calculateProviderMatchScore({
+      rating: provider.stats?.averageRating || 0,
+
+      distanceKm,
+
+      maxDistanceKm,
+
+      completedJobs: provider.stats?.completedJobs || 0,
+
+      responseRate: provider.stats?.responseRate || 0,
+
+      price: providerPrice,
+
+      minPrice: minProviderPrice,
+
+      maxPrice: maxProviderPrice,
+
+      isAvailable,
+    });
+
+    return {
+      provider,
+      services: item.services,
+
+      matchScore,
+
+      matchingFactors: {
+        rating: provider.stats?.averageRating || 0,
+
+        distanceKm:
+          distanceKm !== null ? Math.round(distanceKm * 100) / 100 : null,
+
+        completedJobs: provider.stats?.completedJobs || 0,
+
+        responseRate: provider.stats?.responseRate || 0,
+
+        price: providerPrice,
+
+        isAvailable,
+      },
+    };
+  });
+
+  matchedProviders.sort((a, b) => b.matchScore - a.matchScore);
+
   const total = matchedProviders.length;
 
   const skip = (page - 1) * limit;
 
-  const paginatedProviders =
-    matchedProviders.slice(
-      skip,
-      skip + limit
-    );
+  const paginatedProviders = matchedProviders.slice(skip, skip + limit);
 
-  // Step 11: Response
   return {
     providers: paginatedProviders,
 
@@ -771,60 +677,37 @@ const discoverProviders = async (filters = {}) => {
       page,
       limit,
       total,
-      totalPages: Math.ceil(
-        total / limit
-      ),
+      totalPages: Math.ceil(total / limit),
     },
   };
 };
 
-// Haversine distance
-const calculateDistanceKm = (
-  latitude1,
-  longitude1,
-  latitude2,
-  longitude2
-) => {
+/**
+ * Calculate distance between two
+ * latitude/longitude points.
+ *
+ * Returns distance in kilometers.
+ */
+const calculateDistanceKm = (latitude1, longitude1, latitude2, longitude2) => {
   const earthRadiusKm = 6371;
 
-  const toRadians = (degrees) =>
-    (degrees * Math.PI) / 180;
+  const toRadians = (degrees) => (degrees * Math.PI) / 180;
 
-  const latitudeDifference = toRadians(
-    latitude2 - latitude1
-  );
+  const latitudeDifference = toRadians(latitude2 - latitude1);
 
-  const longitudeDifference = toRadians(
-    longitude2 - longitude1
-  );
+  const longitudeDifference = toRadians(longitude2 - longitude1);
 
   const a =
-    Math.sin(
-      latitudeDifference / 2
-    ) **
-      2 +
-    Math.cos(
-      toRadians(latitude1)
-    ) *
-      Math.cos(
-        toRadians(latitude2)
-      ) *
-      Math.sin(
-        longitudeDifference / 2
-      ) **
-        2;
+    Math.sin(latitudeDifference / 2) ** 2 +
+    Math.cos(toRadians(latitude1)) *
+      Math.cos(toRadians(latitude2)) *
+      Math.sin(longitudeDifference / 2) ** 2;
 
-  const c =
-    2 *
-    Math.atan2(
-      Math.sqrt(a),
-      Math.sqrt(1 - a)
-    );
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 
   return earthRadiusKm * c;
 };
 
-// Export services
 module.exports = {
   createProviderProfile,
   getProviderProfileByUserId,

@@ -1,19 +1,18 @@
 const calculateRatingScore = (rating = 0) => {
-  return Math.min(
-    Math.max(rating / 5, 0),
-    1
-  );
+  return Math.min(Math.max(rating / 5, 0), 1);
 };
 
 const calculateDistanceScore = (
   distanceKm,
   maxDistanceKm = 50
 ) => {
+  // If customer location is not available,
+  // distance should not unfairly penalize the provider.
   if (
     distanceKm === null ||
     distanceKm === undefined
   ) {
-    return 0;
+    return null;
   }
 
   if (distanceKm >= maxDistanceKm) {
@@ -29,10 +28,7 @@ const calculateDistanceScore = (
 const calculateCompletedJobsScore = (
   completedJobs = 0
 ) => {
-  const normalized =
-    Math.min(completedJobs / 100, 1);
-
-  return normalized;
+  return Math.min(completedJobs / 100, 1);
 };
 
 const calculateResponseRateScore = (
@@ -74,6 +70,7 @@ const calculateAvailabilityScore = (
 const calculateProviderMatchScore = ({
   rating = 0,
   distanceKm = null,
+  maxDistanceKm = 50,
   completedJobs = 0,
   responseRate = 0,
   price = null,
@@ -85,7 +82,10 @@ const calculateProviderMatchScore = ({
     calculateRatingScore(rating);
 
   const distanceScore =
-    calculateDistanceScore(distanceKm);
+    calculateDistanceScore(
+      distanceKm,
+      maxDistanceKm
+    );
 
   const completedJobsScore =
     calculateCompletedJobsScore(
@@ -108,6 +108,23 @@ const calculateProviderMatchScore = ({
     calculateAvailabilityScore(
       isAvailable
     );
+
+  /*
+    If customer location is unavailable,
+    remove distance from the calculation
+    and redistribute its weight.
+  */
+
+  if (distanceScore === null) {
+    const score =
+      ratingScore * 40 +
+      completedJobsScore * 20 +
+      responseRateScore * 15 +
+      priceScore * 15 +
+      availabilityScore * 10;
+
+    return Math.round(score * 100) / 100;
+  }
 
   const score =
     ratingScore * 30 +
