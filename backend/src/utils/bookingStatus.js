@@ -1,0 +1,67 @@
+const { BOOKING_STATUS } = require("../models/Booking");
+
+/*
+  Allowed booking status transitions.
+
+  A booking cannot randomly jump
+  from one state to another.
+*/
+
+const BOOKING_STATUS_TRANSITIONS = {
+  [BOOKING_STATUS.PENDING]: [
+    BOOKING_STATUS.ACCEPTED,
+    BOOKING_STATUS.REJECTED,
+    BOOKING_STATUS.CANCELLED_BY_CUSTOMER,
+    BOOKING_STATUS.EXPIRED,
+  ],
+
+  [BOOKING_STATUS.ACCEPTED]: [
+    BOOKING_STATUS.SCHEDULED,
+    BOOKING_STATUS.CANCELLED_BY_CUSTOMER,
+    BOOKING_STATUS.CANCELLED_BY_PROVIDER,
+  ],
+
+  [BOOKING_STATUS.SCHEDULED]: [
+    BOOKING_STATUS.PROVIDER_ON_WAY,
+    BOOKING_STATUS.CANCELLED_BY_CUSTOMER,
+    BOOKING_STATUS.CANCELLED_BY_PROVIDER,
+  ],
+
+  [BOOKING_STATUS.PROVIDER_ON_WAY]: [
+    BOOKING_STATUS.IN_PROGRESS,
+    BOOKING_STATUS.CANCELLED_BY_PROVIDER,
+  ],
+
+  [BOOKING_STATUS.IN_PROGRESS]: [BOOKING_STATUS.COMPLETED],
+
+  [BOOKING_STATUS.COMPLETED]: [BOOKING_STATUS.PAYMENT_PENDING],
+
+  [BOOKING_STATUS.PAYMENT_PENDING]: [BOOKING_STATUS.PAID],
+
+  [BOOKING_STATUS.PAID]: [BOOKING_STATUS.REVIEWED],
+
+  [BOOKING_STATUS.REVIEWED]: [],
+
+  [BOOKING_STATUS.REJECTED]: [],
+
+  [BOOKING_STATUS.CANCELLED_BY_CUSTOMER]: [],
+
+  [BOOKING_STATUS.CANCELLED_BY_PROVIDER]: [],
+
+  [BOOKING_STATUS.EXPIRED]: [],
+};
+
+/**
+ * Check whether a status transition
+ * is allowed.
+ */
+const canTransitionBookingStatus = (currentStatus, nextStatus) => {
+  const allowedStatuses = BOOKING_STATUS_TRANSITIONS[currentStatus] || [];
+
+  return allowedStatuses.includes(nextStatus);
+};
+
+module.exports = {
+  BOOKING_STATUS_TRANSITIONS,
+  canTransitionBookingStatus,
+};
