@@ -1,4 +1,5 @@
 const crypto = require("crypto");
+const mongoose = require("mongoose");
 
 const { Booking, BOOKING_STATUS } = require("../models/Booking");
 const {
@@ -231,6 +232,125 @@ const createBooking = async (customerId, bookingData) => {
     .populate("providerService");
 };
 
+const getBookingAccessFilter = async (user) => {
+  const userId = user.id || user._id || user.sub;
+
+  if (!userId || !mongoose.isValidObjectId(userId)) {
+    throw new AppError(
+      "Invalid authenticated user",
+      401,
+      "INVALID_AUTHENTICATED_USER",
+    );
+  }
+
+  if (user.role === "CUSTOMER") {
+    return { customer: userId };
+  }
+
+  if (user.role === "PROVIDER") {
+    const provider = await Provider.findOne({ user: userId }).select("_id");
+
+    if (!provider) {
+      throw new AppError(
+        "Provider profile not found",
+        404,
+        "PROVIDER_PROFILE_NOT_FOUND",
+      );
+    }
+
+    return { provider: provider._id };
+  }
+
+  throw new AppError(
+    "You are not allowed to access customer or provider bookings",
+    403,
+    "BOOKING_ACCESS_DENIED",
+  );
+};
+
+const getBookingList = async (user, filters = {}) => {
+  const accessFilter = await getBookingAccessFilter(user);
+
+  const query = { ...accessFilter };
+
+  if (filters.status) {
+    const allowedStatuses = Object.values(BOOKING_STATUS);
+
+    if (!allowedStatuses.includes(filters.status)) {
+      throw new AppError(
+        "Invalid booking status filter",
+        400,
+        "INVALID_BOOKING_STATUS",
+      );
+    }
+
+    query.status = filters.status;
+  }
+
+  const page = filters.page || 1;
+  const limit = filters.limit || 10;
+  const skip = (page - 1) * limit;
+
+  const [bookings, total] = await Promise.all([
+    Booking.find(query)
+      .populate("customer", "firstName lastName phone email")
+      .populate({
+        path: "provider",
+        populate: {
+          path: "user",
+          select: "firstName lastName phone",
+        },
+      })
+      .populate("service", "name slug")
+      .populate("providerService", "price priceType")
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit)
+      .lean(),
+
+    Booking.countDocuments(query),
+  ]);
+
+  return {
+    bookings,
+    pagination: {
+      page,
+      limit,
+      total,
+      totalPages: Math.ceil(total / limit),
+      hasNextPage: page * limit < total,
+      hasPreviousPage: page > 1,
+    },
+  };
+};
+
+const getBookingDetails = async (user, bookingId) => {
+  const accessFilter = await getBookingAccessFilter(user);
+
+  const booking = await Booking.findOne({
+    _id: bookingId,
+    ...accessFilter,
+  })
+    .populate("customer", "firstName lastName phone email")
+    .populate({
+      path: "provider",
+      populate: {
+        path: "user",
+        select: "firstName lastName phone",
+      },
+    })
+    .populate("service", "name slug description")
+    .populate("providerService", "price priceType description");
+
+  if (!booking) {
+    throw new AppError("Booking not found", 404, "BOOKING_NOT_FOUND");
+  }
+
+  return booking;
+};
+
 module.exports = {
   createBooking,
+  getBookingList,
+  getBookingDetails,
 };

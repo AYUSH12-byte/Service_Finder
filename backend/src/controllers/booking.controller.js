@@ -1,6 +1,11 @@
 const asyncHandler = require("../utils/asyncHandler");
-const { createdResponse } = require("../utils/apiResponse");
-const { createBooking } = require("../services/booking.service");
+const { createdResponse, successResponse } = require("../utils/apiResponse");
+
+const {
+  createBooking,
+  getBookingList,
+  getBookingDetails,
+} = require("../services/booking.service");
 
 const create = asyncHandler(async (req, res) => {
   const booking = await createBooking(
@@ -15,6 +20,29 @@ const create = asyncHandler(async (req, res) => {
   });
 });
 
+const list = asyncHandler(async (req, res) => {
+  const result = await getBookingList(req.user, req.validated.query);
+
+  return successResponse({
+    res,
+    message: "Bookings retrieved successfully",
+    data: result.bookings,
+    meta: result.pagination,
+  });
+});
+
+const getOne = asyncHandler(async (req, res) => {
+  const booking = await getBookingDetails(req.user, req.validated.params.id);
+
+  return successResponse({
+    res,
+    message: "Booking retrieved successfully",
+    data: { booking },
+  });
+});
+
 module.exports = {
   create,
+  list,
+  getOne,
 };
