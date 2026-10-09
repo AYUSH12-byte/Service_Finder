@@ -1,6 +1,7 @@
 const crypto = require("crypto");
 const mongoose = require("mongoose");
 
+const { canTransitionBookingStatus } = require("../utils/bookingStatus");
 const { Booking, BOOKING_STATUS } = require("../models/Booking");
 const {
   Provider,
@@ -349,8 +350,158 @@ const getBookingDetails = async (user, bookingId) => {
   return booking;
 };
 
+const getAuthenticatedUserId = (user) => {
+  const userId = user.id || user._id || user.sub;
+
+  if (!userId || !mongoose.isValidObjectId(userId)) {
+    throw new AppError(
+      "Invalid authenticated user",
+      401,
+      "INVALID_AUTHENTICATED_USER",
+    );
+  }
+
+  return userId;
+};
+
+const getBookingForProvider = async (user, bookingId) => {
+  const userId = getAuthenticatedUserId(user);
+
+  const provider = await Provider.findOne({
+    user: userId,
+  }).select("_id");
+
+  if (!provider) {
+    throw new AppError(
+      "Provider profile not found",
+      404,
+      "PROVIDER_PROFILE_NOT_FOUND",
+    );
+  }
+
+  const booking = await Booking.findOne({
+    _id: bookingId,
+    provider: provider._id,
+  });
+
+  if (!booking) {
+    throw new AppError("Booking not found", 404, "BOOKING_NOT_FOUND");
+  }
+
+  return booking;
+};
+
+const getBookingForCustomer = async (user, bookingId) => {
+  const userId = getAuthenticatedUserId(user);
+
+  const booking = await Booking.findOne({
+    _id: bookingId,
+    customer: userId,
+  });
+
+  if (!booking) {
+    throw new AppError("Booking not found", 404, "BOOKING_NOT_FOUND");
+  }
+
+  return booking;
+};
+
+const populateBooking = async (bookingId) => {
+  return Booking.findById(bookingId)
+    .populate("customer", "firstName lastName phone email")
+    .populate({
+      path: "provider",
+      populate: {
+        path: "user",
+        select: "firstName lastName phone",
+      },
+    })
+    .populate("service", "name slug")
+    .populate("providerService", "price priceType");
+};
+
+const acceptBooking = async (user, bookingId) => {
+  const booking = await getBookingForProvider(user, bookingId);
+
+  if (!canTransitionBookingStatus(booking.status, BOOKING_STATUS.ACCEPTED)) {
+    throw new AppError(
+      `Cannot accept a booking with status ${booking.status}`,
+      409,
+      "INVALID_BOOKING_TRANSITION",
+    );
+  }
+
+  booking.status = BOOKING_STATUS.ACCEPTED;
+  await booking.save();
+
+  return populateBooking(booking._id);
+};
+
+const rejectBooking = async (user, bookingId, reason) => {
+  const booking = await getBookingForProvider(user, bookingId);
+
+  if (!canTransitionBookingStatus(booking.status, BOOKING_STATUS.REJECTED)) {
+    throw new AppError(
+      `Cannot reject a booking with status ${booking.status}`,
+      409,
+      "INVALID_BOOKING_TRANSITION",
+    );
+  }
+
+  booking.status = BOOKING_STATUS.REJECTED;
+  booking.rejection = {
+    reason,
+    rejectedAt: new Date(),
+  };
+
+  await booking.save();
+
+  return populateBooking(booking._id);
+};
+
+const cancelBooking = async (user, bookingId, reason) => {
+  let booking;
+  let nextStatus;
+
+  if (user.role === USER_ROLES.CUSTOMER) {
+    booking = await getBookingForCustomer(user, bookingId);
+    nextStatus = BOOKING_STATUS.CANCELLED_BY_CUSTOMER;
+  } else if (user.role === USER_ROLES.PROVIDER) {
+    booking = await getBookingForProvider(user, bookingId);
+    nextStatus = BOOKING_STATUS.CANCELLED_BY_PROVIDER;
+  } else {
+    throw new AppError(
+      "Only the customer or assigned provider can cancel this booking",
+      403,
+      "BOOKING_CANCELLATION_DENIED",
+    );
+  }
+
+  if (!canTransitionBookingStatus(booking.status, nextStatus)) {
+    throw new AppError(
+      `Cannot cancel a booking with status ${booking.status}`,
+      409,
+      "INVALID_BOOKING_TRANSITION",
+    );
+  }
+
+  booking.status = nextStatus;
+  booking.cancellation = {
+    reason,
+    cancelledBy: getAuthenticatedUserId(user),
+    cancelledAt: new Date(),
+  };
+
+  await booking.save();
+
+  return populateBooking(booking._id);
+};
+
 module.exports = {
   createBooking,
   getBookingList,
   getBookingDetails,
+  acceptBooking,
+  rejectBooking,
+  cancelBooking,
 };
