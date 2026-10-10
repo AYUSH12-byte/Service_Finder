@@ -1,14 +1,22 @@
+
 const crypto = require("crypto");
 const mongoose = require("mongoose");
 
-const { canTransitionBookingStatus } = require("../utils/bookingStatus");
-const { Booking, BOOKING_STATUS } = require("../models/Booking");
+const {
+  canTransitionBookingStatus,
+} = require("../utils/bookingStatus");
+
+const {
+  Booking,
+  BOOKING_STATUS,
+} = require("../models/Booking");
+
 const {
   Provider,
   PROVIDER_VERIFICATION_STATUS,
 } = require("../models/Provider");
+
 const { ProviderService } = require("../models/ProviderService");
-const { Service } = require("../models/Service");
 const { User, USER_ROLES, USER_STATUS } = require("../models/User");
 const AppError = require("../utils/AppError");
 
@@ -22,10 +30,26 @@ const ACTIVE_BOOKING_STATUSES = [
 
 const generateBookingNumber = () => {
   const date = new Date().toISOString().slice(0, 10).replace(/-/g, "");
-
   const suffix = crypto.randomBytes(4).toString("hex").toUpperCase();
 
   return `SFB-${date}-${suffix}`;
+};
+
+const getAuthenticatedUserId = (userOrId) => {
+  const userId =
+    typeof userOrId === "string"
+      ? userOrId
+      : userOrId?.id || userOrId?._id || userOrId?.sub;
+
+  if (!userId || !mongoose.isValidObjectId(userId)) {
+    throw new AppError(
+      "Invalid authenticated user",
+      401,
+      "INVALID_AUTHENTICATED_USER"
+    );
+  }
+
+  return userId;
 };
 
 const getDayName = (date) => {
@@ -45,43 +69,69 @@ const minutesFromTime = (time) => {
   return hours * 60 + minutes;
 };
 
+const populateBooking = async (bookingId) => {
+  return Booking.findById(bookingId)
+    .populate("customer", "firstName lastName phone email")
+    .populate({
+      path: "provider",
+      populate: {
+        path: "user",
+        select: "firstName lastName phone",
+      },
+    })
+    .populate("service", "name slug description")
+    .populate("providerService", "price priceType description");
+};
+
+// CREATE BOOKING
 const createBooking = async (customerId, bookingData) => {
-  const customer = await User.findById(customerId);
+  const customer = await User.findById(
+    getAuthenticatedUserId(customerId)
+  );
 
   if (!customer || customer.role !== USER_ROLES.CUSTOMER) {
     throw new AppError(
       "Only customer accounts can create bookings",
       403,
-      "CUSTOMER_ONLY",
+      "CUSTOMER_ONLY"
     );
   }
 
   if (customer.status !== USER_STATUS.ACTIVE) {
-    throw new AppError("Your account is not active", 403, "ACCOUNT_INACTIVE");
+    throw new AppError(
+      "Your account is not active",
+      403,
+      "ACCOUNT_INACTIVE"
+    );
   }
 
-  const provider = await Provider.findById(bookingData.providerId).populate(
-    "user",
-    "status role",
-  );
+  const provider = await Provider.findById(bookingData.providerId)
+    .populate("user", "status role");
 
   if (!provider) {
     throw new AppError("Provider not found", 404, "PROVIDER_NOT_FOUND");
   }
 
-  if (provider.verificationStatus !== PROVIDER_VERIFICATION_STATUS.VERIFIED) {
+  if (
+    provider.verificationStatus !==
+    PROVIDER_VERIFICATION_STATUS.VERIFIED
+  ) {
     throw new AppError(
       "This provider is not verified for bookings",
       409,
-      "PROVIDER_NOT_VERIFIED",
+      "PROVIDER_NOT_VERIFIED"
     );
   }
 
-  if (!provider.user || provider.user.status !== USER_STATUS.ACTIVE) {
+  if (
+    !provider.user ||
+    provider.user.role !== USER_ROLES.PROVIDER ||
+    provider.user.status !== USER_STATUS.ACTIVE
+  ) {
     throw new AppError(
       "This provider account is not active",
       409,
-      "PROVIDER_INACTIVE",
+      "PROVIDER_INACTIVE"
     );
   }
 
@@ -95,7 +145,7 @@ const createBooking = async (customerId, bookingData) => {
     throw new AppError(
       "The provider does not offer this active service",
       404,
-      "PROVIDER_SERVICE_NOT_FOUND",
+      "PROVIDER_SERVICE_NOT_FOUND"
     );
   }
 
@@ -105,14 +155,18 @@ const createBooking = async (customerId, bookingData) => {
     throw new AppError(
       "This service is currently unavailable",
       409,
-      "SERVICE_INACTIVE",
+      "SERVICE_INACTIVE"
     );
   }
 
   const scheduledDate = new Date(bookingData.scheduledDate);
 
   if (Number.isNaN(scheduledDate.getTime())) {
-    throw new AppError("Invalid booking date", 400, "INVALID_BOOKING_DATE");
+    throw new AppError(
+      "Invalid booking date",
+      400,
+      "INVALID_BOOKING_DATE"
+    );
   }
 
   const startMinutes = minutesFromTime(bookingData.startTime);
@@ -122,7 +176,7 @@ const createBooking = async (customerId, bookingData) => {
     throw new AppError(
       "End time must be later than start time",
       400,
-      "INVALID_BOOKING_TIME",
+      "INVALID_BOOKING_TIME"
     );
   }
 
@@ -132,29 +186,33 @@ const createBooking = async (customerId, bookingData) => {
     throw new AppError(
       "Booking date cannot be in the past",
       400,
-      "BOOKING_DATE_IN_PAST",
+      "BOOKING_DATE_IN_PAST"
     );
   }
 
-  const dayName = getDayName(scheduledDate);
-  const dayAvailability = provider.availability?.[dayName];
+  const dayAvailability = provider.availability?.[
+    getDayName(scheduledDate)
+  ];
 
   if (!dayAvailability?.enabled) {
     throw new AppError(
       "Provider is not available on the selected day",
       409,
-      "PROVIDER_UNAVAILABLE",
+      "PROVIDER_UNAVAILABLE"
     );
   }
 
   const availableStart = minutesFromTime(dayAvailability.startTime);
   const availableEnd = minutesFromTime(dayAvailability.endTime);
 
-  if (startMinutes < availableStart || endMinutes > availableEnd) {
+  if (
+    startMinutes < availableStart ||
+    endMinutes > availableEnd
+  ) {
     throw new AppError(
       "Selected time is outside the provider's working hours",
       409,
-      "OUTSIDE_PROVIDER_HOURS",
+      "OUTSIDE_PROVIDER_HOURS"
     );
   }
 
@@ -165,7 +223,7 @@ const createBooking = async (customerId, bookingData) => {
       throw new AppError(
         "Booking start time must be in the future",
         400,
-        "BOOKING_TIME_IN_PAST",
+        "BOOKING_TIME_IN_PAST"
       );
     }
   }
@@ -193,7 +251,7 @@ const createBooking = async (customerId, bookingData) => {
     throw new AppError(
       "This time slot is already booked. Please choose another time",
       409,
-      "BOOKING_TIME_CONFLICT",
+      "BOOKING_TIME_CONFLICT"
     );
   }
 
@@ -201,7 +259,7 @@ const createBooking = async (customerId, bookingData) => {
   const basePrice = providerService.price;
   const subtotal = basePrice * quantity;
 
-  // Price is calculated on the server, never accepted from the client.
+  // Never trust a price supplied by the client.
   const booking = await Booking.create({
     customer: customer._id,
     provider: provider._id,
@@ -226,36 +284,26 @@ const createBooking = async (customerId, bookingData) => {
     },
   });
 
-  return Booking.findById(booking._id)
-    .populate("customer", "firstName lastName phone")
-    .populate("provider")
-    .populate("service", "name slug")
-    .populate("providerService");
+  return populateBooking(booking._id);
 };
 
+// BOOKING ACCESS
 const getBookingAccessFilter = async (user) => {
-  const userId = user.id || user._id || user.sub;
+  const userId = getAuthenticatedUserId(user);
 
-  if (!userId || !mongoose.isValidObjectId(userId)) {
-    throw new AppError(
-      "Invalid authenticated user",
-      401,
-      "INVALID_AUTHENTICATED_USER",
-    );
-  }
-
-  if (user.role === "CUSTOMER") {
+  if (user.role === USER_ROLES.CUSTOMER) {
     return { customer: userId };
   }
 
-  if (user.role === "PROVIDER") {
-    const provider = await Provider.findOne({ user: userId }).select("_id");
+  if (user.role === USER_ROLES.PROVIDER) {
+    const provider = await Provider.findOne({ user: userId })
+      .select("_id");
 
     if (!provider) {
       throw new AppError(
         "Provider profile not found",
         404,
-        "PROVIDER_PROFILE_NOT_FOUND",
+        "PROVIDER_PROFILE_NOT_FOUND"
       );
     }
 
@@ -263,25 +311,72 @@ const getBookingAccessFilter = async (user) => {
   }
 
   throw new AppError(
-    "You are not allowed to access customer or provider bookings",
+    "You are not allowed to access these bookings",
     403,
-    "BOOKING_ACCESS_DENIED",
+    "BOOKING_ACCESS_DENIED"
   );
 };
 
+const getBookingForProvider = async (user, bookingId) => {
+  const userId = getAuthenticatedUserId(user);
+
+  const provider = await Provider.findOne({ user: userId })
+    .select("_id");
+
+  if (!provider) {
+    throw new AppError(
+      "Provider profile not found",
+      404,
+      "PROVIDER_PROFILE_NOT_FOUND"
+    );
+  }
+
+  const booking = await Booking.findOne({
+    _id: bookingId,
+    provider: provider._id,
+  });
+
+  if (!booking) {
+    throw new AppError(
+      "Booking not found",
+      404,
+      "BOOKING_NOT_FOUND"
+    );
+  }
+
+  return booking;
+};
+
+const getBookingForCustomer = async (user, bookingId) => {
+  const userId = getAuthenticatedUserId(user);
+
+  const booking = await Booking.findOne({
+    _id: bookingId,
+    customer: userId,
+  });
+
+  if (!booking) {
+    throw new AppError(
+      "Booking not found",
+      404,
+      "BOOKING_NOT_FOUND"
+    );
+  }
+
+  return booking;
+};
+
+// LIST BOOKINGS
 const getBookingList = async (user, filters = {}) => {
   const accessFilter = await getBookingAccessFilter(user);
-
   const query = { ...accessFilter };
 
   if (filters.status) {
-    const allowedStatuses = Object.values(BOOKING_STATUS);
-
-    if (!allowedStatuses.includes(filters.status)) {
+    if (!Object.values(BOOKING_STATUS).includes(filters.status)) {
       throw new AppError(
         "Invalid booking status filter",
         400,
-        "INVALID_BOOKING_STATUS",
+        "INVALID_BOOKING_STATUS"
       );
     }
 
@@ -308,7 +403,6 @@ const getBookingList = async (user, filters = {}) => {
       .skip(skip)
       .limit(limit)
       .lean(),
-
     Booking.countDocuments(query),
   ]);
 
@@ -325,6 +419,7 @@ const getBookingList = async (user, filters = {}) => {
   };
 };
 
+// BOOKING DETAILS
 const getBookingDetails = async (user, bookingId) => {
   const accessFilter = await getBookingAccessFilter(user);
 
@@ -344,121 +439,99 @@ const getBookingDetails = async (user, bookingId) => {
     .populate("providerService", "price priceType description");
 
   if (!booking) {
-    throw new AppError("Booking not found", 404, "BOOKING_NOT_FOUND");
-  }
-
-  return booking;
-};
-
-const getAuthenticatedUserId = (user) => {
-  const userId = user.id || user._id || user.sub;
-
-  if (!userId || !mongoose.isValidObjectId(userId)) {
     throw new AppError(
-      "Invalid authenticated user",
-      401,
-      "INVALID_AUTHENTICATED_USER",
-    );
-  }
-
-  return userId;
-};
-
-const getBookingForProvider = async (user, bookingId) => {
-  const userId = getAuthenticatedUserId(user);
-
-  const provider = await Provider.findOne({
-    user: userId,
-  }).select("_id");
-
-  if (!provider) {
-    throw new AppError(
-      "Provider profile not found",
+      "Booking not found",
       404,
-      "PROVIDER_PROFILE_NOT_FOUND",
+      "BOOKING_NOT_FOUND"
     );
   }
 
-  const booking = await Booking.findOne({
-    _id: bookingId,
-    provider: provider._id,
-  });
-
-  if (!booking) {
-    throw new AppError("Booking not found", 404, "BOOKING_NOT_FOUND");
-  }
-
   return booking;
 };
 
-const getBookingForCustomer = async (user, bookingId) => {
-  const userId = getAuthenticatedUserId(user);
-
-  const booking = await Booking.findOne({
-    _id: bookingId,
-    customer: userId,
-  });
-
-  if (!booking) {
-    throw new AppError("Booking not found", 404, "BOOKING_NOT_FOUND");
-  }
-
-  return booking;
-};
-
-const populateBooking = async (bookingId) => {
-  return Booking.findById(bookingId)
-    .populate("customer", "firstName lastName phone email")
-    .populate({
-      path: "provider",
-      populate: {
-        path: "user",
-        select: "firstName lastName phone",
-      },
-    })
-    .populate("service", "name slug")
-    .populate("providerService", "price priceType");
-};
-
+// ACCEPT BOOKING
 const acceptBooking = async (user, bookingId) => {
   const booking = await getBookingForProvider(user, bookingId);
 
-  if (!canTransitionBookingStatus(booking.status, BOOKING_STATUS.ACCEPTED)) {
+  if (
+    !canTransitionBookingStatus(
+      booking.status,
+      BOOKING_STATUS.ACCEPTED
+    )
+  ) {
     throw new AppError(
       `Cannot accept a booking with status ${booking.status}`,
       409,
-      "INVALID_BOOKING_TRANSITION",
+      "INVALID_BOOKING_TRANSITION"
     );
   }
 
-  booking.status = BOOKING_STATUS.ACCEPTED;
-  await booking.save();
+  const updated = await Booking.findOneAndUpdate(
+    {
+      _id: booking._id,
+      status: booking.status,
+    },
+    { $set: { status: BOOKING_STATUS.ACCEPTED } },
+    { returnDocument: "after", runValidators: true }
+  );
 
-  return populateBooking(booking._id);
+  if (!updated) {
+    throw new AppError(
+      "Booking was changed by another request",
+      409,
+      "BOOKING_UPDATE_CONFLICT"
+    );
+  }
+
+  return populateBooking(updated._id);
 };
 
+// REJECT BOOKING
 const rejectBooking = async (user, bookingId, reason) => {
   const booking = await getBookingForProvider(user, bookingId);
 
-  if (!canTransitionBookingStatus(booking.status, BOOKING_STATUS.REJECTED)) {
+  if (
+    !canTransitionBookingStatus(
+      booking.status,
+      BOOKING_STATUS.REJECTED
+    )
+  ) {
     throw new AppError(
       `Cannot reject a booking with status ${booking.status}`,
       409,
-      "INVALID_BOOKING_TRANSITION",
+      "INVALID_BOOKING_TRANSITION"
     );
   }
 
-  booking.status = BOOKING_STATUS.REJECTED;
-  booking.rejection = {
-    reason,
-    rejectedAt: new Date(),
-  };
+  const updated = await Booking.findOneAndUpdate(
+    {
+      _id: booking._id,
+      status: booking.status,
+    },
+    {
+      $set: {
+        status: BOOKING_STATUS.REJECTED,
+        rejection: {
+          reason,
+          rejectedAt: new Date(),
+        },
+      },
+    },
+    { returnDocument: "after", runValidators: true }
+  );
 
-  await booking.save();
+  if (!updated) {
+    throw new AppError(
+      "Booking was changed by another request",
+      409,
+      "BOOKING_UPDATE_CONFLICT"
+    );
+  }
 
-  return populateBooking(booking._id);
+  return populateBooking(updated._id);
 };
 
+// CANCEL BOOKING
 const cancelBooking = async (user, bookingId, reason) => {
   let booking;
   let nextStatus;
@@ -473,7 +546,7 @@ const cancelBooking = async (user, bookingId, reason) => {
     throw new AppError(
       "Only the customer or assigned provider can cancel this booking",
       403,
-      "BOOKING_CANCELLATION_DENIED",
+      "BOOKING_CANCELLATION_DENIED"
     );
   }
 
@@ -481,20 +554,123 @@ const cancelBooking = async (user, bookingId, reason) => {
     throw new AppError(
       `Cannot cancel a booking with status ${booking.status}`,
       409,
-      "INVALID_BOOKING_TRANSITION",
+      "INVALID_BOOKING_TRANSITION"
     );
   }
 
-  booking.status = nextStatus;
-  booking.cancellation = {
-    reason,
-    cancelledBy: getAuthenticatedUserId(user),
-    cancelledAt: new Date(),
-  };
+  const updated = await Booking.findOneAndUpdate(
+    {
+      _id: booking._id,
+      status: booking.status,
+    },
+    {
+      $set: {
+        status: nextStatus,
+        cancellation: {
+          reason,
+          cancelledBy: getAuthenticatedUserId(user),
+          cancelledAt: new Date(),
+        },
+      },
+    },
+    { returnDocument: "after", runValidators: true }
+  );
 
-  await booking.save();
+  if (!updated) {
+    throw new AppError(
+      "Booking was changed by another request",
+      409,
+      "BOOKING_UPDATE_CONFLICT"
+    );
+  }
 
-  return populateBooking(booking._id);
+  return populateBooking(updated._id);
+};
+
+// UPDATE JOB PROGRESS
+const advanceBookingProgress = async (user, bookingId, nextStatus) => {
+  const userId = getAuthenticatedUserId(user);
+
+  if (user.role !== USER_ROLES.PROVIDER) {
+    throw new AppError(
+      "Only service providers can update job progress",
+      403,
+      "PROVIDER_ONLY"
+    );
+  }
+
+  const provider = await Provider.findOne({ user: userId })
+    .select("_id");
+
+  if (!provider) {
+    throw new AppError(
+      "Provider profile not found",
+      404,
+      "PROVIDER_PROFILE_NOT_FOUND"
+    );
+  }
+
+  const booking = await Booking.findOne({
+    _id: bookingId,
+    provider: provider._id,
+  });
+
+  if (!booking) {
+    throw new AppError(
+      "Booking not found",
+      404,
+      "BOOKING_NOT_FOUND"
+    );
+  }
+
+  if (
+    ![
+      BOOKING_STATUS.SCHEDULED,
+      BOOKING_STATUS.PROVIDER_ON_WAY,
+      BOOKING_STATUS.IN_PROGRESS,
+      BOOKING_STATUS.COMPLETED,
+    ].includes(nextStatus)
+  ) {
+    throw new AppError(
+      "Invalid job progress status",
+      400,
+      "INVALID_PROGRESS_STATUS"
+    );
+  }
+
+  if (!canTransitionBookingStatus(booking.status, nextStatus)) {
+    throw new AppError(
+      `Cannot change booking from ${booking.status} to ${nextStatus}`,
+      409,
+      "INVALID_BOOKING_TRANSITION"
+    );
+  }
+
+  const update = { status: nextStatus };
+
+  if (nextStatus === BOOKING_STATUS.COMPLETED) {
+    update.completedAt = new Date();
+  }
+
+  const updated = await Booking.findOneAndUpdate(
+    {
+      _id: booking._id,
+      provider: provider._id,
+      status: booking.status,
+    },
+    { $set: update },
+    { returnDocument: "after", runValidators: true }
+  );
+
+  if (!updated) {
+    throw new AppError(
+      "The booking was updated by another request. Refresh and try again",
+      409,
+      "BOOKING_UPDATE_CONFLICT"
+    );
+  }
+
+  return populateBooking(updated._id);
 };
 
 module.exports = {
@@ -504,4 +680,5 @@ module.exports = {
   acceptBooking,
   rejectBooking,
   cancelBooking,
+  advanceBookingProgress,
 };

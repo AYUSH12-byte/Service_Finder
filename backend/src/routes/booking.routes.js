@@ -11,6 +11,7 @@ const {
   accept,
   reject,
   cancel,
+  updateProgress,
 } = require("../controllers/booking.controller");
 
 const {
@@ -19,6 +20,7 @@ const {
   rejectBookingSchema,
   cancelBookingSchema,
   listBookingsSchema,
+  updateBookingProgressSchema,
 } = require("../validators/booking.validator");
 
 const router = express.Router();
@@ -34,6 +36,13 @@ router.get(
 );
 
 router.post("/", authorize("CUSTOMER"), validate(createBookingSchema), create);
+
+router.patch(
+  "/:id/progress",
+  authorize("PROVIDER"),
+  validate(updateBookingProgressSchema),
+  updateProgress,
+);
 
 // Provider actions
 router.patch(
